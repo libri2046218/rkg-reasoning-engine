@@ -6,6 +6,25 @@ Prefices
 
 }
 
+Axioms 
+
+{
+
+    <rdfs:domain> <rdfs:domain> <rdf:Property>
+    <rdfs:range> <rdfs:domain> <rdf:Property>
+    <rdfs:subPropertyOf> <rdfs:domain> <rdf:Property>
+    <rdfs:subClassOf> <rdfs:domain> <rdfs:Class>
+    <rdf:type> <rdfs:range> <rdfs:Class>
+    <rdfs:domain> <rdfs:range> <rdfs:Class>
+    <rdfs:range> <rdfs:range> <rdfs:Class>
+    <rdfs:subPropertyOf> <rdfs:range> <rdf:Property>
+    <rdfs:subClassOf> <rdfs:range> <rdfs:Class>
+    <rdf:type> <rdf:type> <rdf:Property>
+    <rdf:type> <rdfs:domain> <rdfs:Resource>
+    <rdfs:Resource> <rdf:type> rdfs:Class> 
+
+}
+
 Rules 
 {
 
