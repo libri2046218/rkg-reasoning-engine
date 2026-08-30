@@ -1,0 +1,1 @@
+rootProject.name = "rkg-reasoning-engine"
