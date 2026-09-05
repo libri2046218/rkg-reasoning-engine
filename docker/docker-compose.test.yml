@@ -1,8 +1,6 @@
 services:
   graphdb:
     image: ontotext/graphdb:11.5.0
-    ports:
-      - "7200:7200"
     volumes:
       - ../rules/chase-rules.pie:/opt/graphdb/rules/chase-rules.pie
       - ../src/main/resources/graphdb.license:/opt/graphdb/home/conf/graphdb.license

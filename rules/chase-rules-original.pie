@@ -1,4 +1,4 @@
-Prefices
+Prefices 
 {
 
     rdf: http://www.w3.org/1999/02/22-rdf-syntax-ns#
@@ -6,7 +6,7 @@ Prefices
 
 }
 
-Axioms
+Axioms 
 
 {
 
@@ -23,13 +23,9 @@ Axioms
     <rdf:type> <rdfs:domain> <rdfs:Resource>
     <rdfs:Resource> <rdf:type> <rdfs:Class>
 
-    <rdf:Property> <rdfs:domain> <rdfs:Resource>
-    <rdf:Property> <rdfs:range> <rdfs:Resource>
-    <rdfs:Class> <rdfs:subClassOf> <rdfs:Resource>
-
 }
 
-Rules
+Rules 
 {
 
     Id: rkg_rule_1
@@ -46,95 +42,110 @@ Rules
 
     Id: rkg_rule_3
         a <rdfs:subClassOf> b
-        b <rdfs:subClassOf> c
+        b <rdfs:subClassOf> c 
         ---------------------
         a <rdfs:subClassOf> c
-
+    
     Id: rkg_rule_4
-        p <rdfs:domain> c
-        a p b
+        p <rdfs:domain> c 
+        a p b 
         ---------------------
-        a <rdf:type> c
-
+        a <rdf:type> c 
+    
     Id: rkg_rule_5
-        p <rdfs:range> c
+        p <rdfs:range> c 
         a p b
         ---------------------
-        b <rdf:type> c
-
+        b <rdf:type> c 
+    
     Id: rkg_rule_6
         p <rdf:type> <rdf:Property>
         ---------------------
-        p <rdfs:subPropertyOf> p
-
+        p <rdfs:subPropertyOf> p 
+    
     Id: rkg_rule_7
         c <rdf:type> <rdfs:Class>
         ---------------------
-        c <rdfs:subClassOf> c
-
+        c <rdfs:subClassOf> c 
+    
     Id: rkg_rule_8
         p <rdfs:subPropertyOf> q
-        q <rdfs:subPropertyOf> r
+        q <rdfs:subPropertyOf> r 
         ---------------------
-        p <rdfs:subPropertyOf> r
+        p <rdfs:subPropertyOf> r 
+    
+    Id: rkg_rule_9
+        a p b 
+        ---------------------
+        a <rdf:type> <rdfs:Resource>
 
+    Id: rkg_rule_10
+        a p b
+        ---------------------
+        b <rdf:type> <rdfs:Resource>
+    
     Id: rkg_rule_11
         a p b
         ---------------------
         p <rdf:type> <rdf:Property>
+    
+    Id: rkg_rule_12
+        a <rdf:type> <rdfs:Class>
+        ---------------------
+        a <rdfs:subClassOf> <rdfs:Resource>
 
     Id: rkg_rule_13
         p <rdfs:domain> b
-        b <rdfs:subClassOf> c
+        b <rdfs:subClassOf> c 
         ---------------------
-        p <rdfs:domain> c
-
+        p <rdfs:domain> c 
+    
     Id: rkg_rule_14
         p <rdfs:range> b
         b <rdfs:subClassOf> c
         ---------------------
-        p <rdfs:range> c
-
+        p <rdfs:range> c 
+    
     Id: rkg_rule_15
-        q <rdfs:domain> c
-        p <rdfs:subPropertyOf> q
+        q <rdfs:domain> c 
+        p <rdfs:subPropertyOf> q 
         ---------------------
-        p <rdfs:domain> c
+        p <rdfs:domain> c 
 
-    Id: rkg_rule_16
-        q <rdfs:range> c
-        p <rdfs:subPropertyOf> q
+    Id: rkg_rule_16 
+        q <rdfs:range> c 
+        p <rdfs:subPropertyOf> q 
         ---------------------
-        p <rdfs:range> c
-
+        p <rdfs:range> c 
+    
     Id: rkg_rule_17
-        <rdf:type> <rdfs:subPropertyOf> p
-        p <rdfs:domain> a
+        <rdf:type> <rdfs:subPropertyOf> p 
+        p <rdfs:domain> a 
         ---------------------
         <rdfs:Resource> <rdfs:subClassOf> a
-
+    
     Id: rkg_rule_18
-        <rdfs:subClassOf> <rdfs:subPropertyOf> p
-        p <rdfs:domain> a
+        <rdfs:subClassOf> <rdfs:subPropertyOf> p 
+        p <rdfs:domain> a 
         ---------------------
-        <rdfs:Class> <rdfs:subClassOf> a
-
+        <rdfs:Class> <rdfs:subClassOf> a 
+    
     Id: rkg_rule_19
-        <rdfs:subClassOf> <rdfs:subPropertyOf> p
-        p <rdfs:range> a
+        <rdfs:subClassOf> <rdfs:subPropertyOf> p 
+        p <rdfs:range> a 
         ---------------------
-        <rdfs:Class> <rdfs:subClassOf> a
+        <rdfs:Class> <rdfs:subClassOf> a 
 
     Id: rkg_rule_20
-        <rdfs:subPropertyOf> <rdfs:subPropertyOf> p
-        p <rdfs:domain> a
+        <rdfs:subPropertyOf> <rdfs:subPropertyOf> p 
+        p <rdfs:domain> a 
         ---------------------
-        <rdf:Property> <rdfs:subClassOf> a
-
-    Id: rkg_rule_21
-        <rdfs:subPropertyOf> <rdfs:subPropertyOf> p
-        p <rdfs:range> a
+        <rdf:Property> <rdfs:subClassOf> a 
+    
+    Id: rkg_rule_21 
+        <rdfs:subPropertyOf> <rdfs:subPropertyOf> p 
+        p <rdfs:range> a 
         ---------------------
-        <rdf:Property> <rdfs:subClassOf> a
+        <rdf:Property> <rdfs:subClassOf> a 
 
 }
