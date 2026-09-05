@@ -35,18 +35,18 @@ export RKG_TOKEN='…'
 
 ## Start GraphDB locally
 
-From the `docker/` directory, the test-oriented Compose file exposes GraphDB on port
-7200 and mounts the ruleset and license expected by repository creation:
+From the `docker/` directory, the standard Compose file exposes GraphDB on port 7200 and
+mounts the ruleset and license expected by repository creation:
 
 ```sh
 cd docker
-docker compose -f docker-compose.test.yml up -d
+docker compose up -d
 ```
 
 Wait for GraphDB to be ready before creating a repository. Stop it with:
 
 ```sh
-docker compose -f docker-compose.test.yml down
+docker compose down
 ```
 
 `docker-compose.yml` publishes GraphDB on the default local port, `7200`. For a remote or
