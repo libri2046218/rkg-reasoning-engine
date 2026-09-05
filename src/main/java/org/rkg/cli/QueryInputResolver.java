@@ -16,11 +16,16 @@ final class QueryInputResolver {
     }
 
     static String resolve(String inlineQuery, Path file) {
+        return resolve(inlineQuery, file, "SPARQL query");
+    }
+
+    static String resolve(String inlineQuery, Path file, String inputDescription) {
         boolean hasInline = inlineQuery != null && !inlineQuery.isBlank();
         boolean hasFile = file != null;
         if (hasInline == hasFile) {
             throw new IllegalArgumentException(
-                    "Supply exactly one of an inline SPARQL argument or --file <path.sparql>, not both/neither.");
+                    "Supply exactly one inline " + inputDescription + " argument or --file <path.sparql>, "
+                            + "not both/neither.");
         }
         if (hasFile) {
             try {

@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -49,6 +50,12 @@ class SkolemNamingTest {
     @Test
     void blankNodeUsesStableLabelInsteadOfPercentEncoding() {
         String witness = SkolemNaming.classWitness("b0", true);
+        assertEquals("urn:rkg:witness:class:bn:b0", witness);
+    }
+
+    @Test
+    void rdf4jBlankNodeUsesTheSameStableWitnessName() {
+        String witness = SkolemNaming.classWitness(SimpleValueFactory.getInstance().createBNode("b0"));
         assertEquals("urn:rkg:witness:class:bn:b0", witness);
     }
 

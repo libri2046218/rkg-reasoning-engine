@@ -42,4 +42,13 @@ class QueryInputResolverTest {
         assertThrows(IllegalArgumentException.class,
                 () -> QueryInputResolver.resolve("SELECT * WHERE { ?s ?p ?o }", file));
     }
+
+    @Test
+    void describesUpdatesCorrectlyWhenTheirInputIsMissing() {
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+                () -> QueryInputResolver.resolve(null, null, "SPARQL update"));
+
+        assertEquals("Supply exactly one inline SPARQL update argument or --file <path.sparql>, not both/neither.",
+                exception.getMessage());
+    }
 }

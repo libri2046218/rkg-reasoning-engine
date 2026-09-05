@@ -1,7 +1,6 @@
 package org.rkg.connector;
 
 import java.io.IOException;
-import java.io.InputStream;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -11,27 +10,21 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import org.rkg.config.GraphDbCredentials;
 
 /**
  * Thin wrapper around GraphDB's repository-management REST API (distinct from the standard
  * RDF4J/SPARQL protocol used for query/update, which is handled separately by
  * {@link Rdf4jGraphDBConnector} via RDF4J's own HTTP client). Responsible for repository
- * lifecycle (create/list/delete) and for installing the single bundled ruleset at repository
- * creation time, per §4.1/§7.2 of the software design document.
+ * lifecycle (create/list/delete) and for configuring the server-side RKG ruleset path at
+ * repository creation time, per §4.1/§7.2 of the software design document.
  */
 final class GraphDBRestClient {
 
-    /** Resource name (classpath, under {@code src/main/resources}) of the bundled ruleset. */
-    private static final String BUNDLED_RULESET_RESOURCE = "/rules/chase-rules.pie";
-    /**
-     * Identifier GraphDB stores the uploaded ruleset under; referenced by every repository config.
-     * This is the fixed path inside the GraphDB Docker container where all rulesets are mounted.
-     * Not configurable; part of the stable deployment contract with GraphDB 11.5+.
-     */
-    private static final String RULESET_ID = "/opt/graphdb/rules/chase-rules.pie";
-
+    private static final String DEFAULT_RULESET_PATH = "/opt/graphdb/rules/chase-rules.pie";
     private final String endpointUrl;
     private final HttpClient httpClient;
+    private final GraphDbCredentials credentials;
 
     /**
      * Creates a REST client, normalizing the endpoint URL. Strips trailing "/" from the input
@@ -41,10 +34,15 @@ final class GraphDBRestClient {
      * @param endpointUrl GraphDB REST endpoint (e.g., "http://localhost:7200" or "http://localhost:7200/")
      */
     GraphDBRestClient(String endpointUrl) {
+        this(endpointUrl, new GraphDbCredentials(null, null, null));
+    }
+
+    GraphDBRestClient(String endpointUrl, GraphDbCredentials credentials) {
         this.endpointUrl = endpointUrl.endsWith("/") ? endpointUrl.substring(0, endpointUrl.length() - 1) : endpointUrl;
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(10))
                 .build();
+        this.credentials = credentials;
     }
 
     String endpointUrl() {
@@ -52,17 +50,19 @@ final class GraphDBRestClient {
     }
 
     void createRepository(String repoName) {
+        RepositoryNames.requireValid(repoName);
 
         String configTurtle = repositoryConfigTurtle(repoName);
         Multipart multipart = new Multipart();
         multipart.addFormField("config", configTurtle, "text/turtle", "config.ttl");
 
-        HttpRequest request = HttpRequest.newBuilder()
+        HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
                 .uri(URI.create(endpointUrl + "/rest/repositories"))
                 .timeout(Duration.ofSeconds(30))
                 .header("Content-Type", multipart.contentType())
-                .POST(HttpRequest.BodyPublishers.ofByteArray(multipart.build()))
-                .build();
+                .POST(HttpRequest.BodyPublishers.ofByteArray(multipart.build()));
+        credentials.authorizationHeader().ifPresent(value -> requestBuilder.header("Authorization", value));
+        HttpRequest request = requestBuilder.build();
 
         HttpResponse<String> response = send(request);
         if (response.statusCode() / 100 != 2) {
@@ -71,11 +71,13 @@ final class GraphDBRestClient {
     }
 
     void deleteRepository(String repoName) {
-        HttpRequest request = HttpRequest.newBuilder()
+        RepositoryNames.requireValid(repoName);
+        HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
                 .uri(URI.create(endpointUrl + "/rest/repositories/" + repoName))
                 .timeout(Duration.ofSeconds(30))
-                .DELETE()
-                .build();
+                .DELETE();
+        credentials.authorizationHeader().ifPresent(value -> requestBuilder.header("Authorization", value));
+        HttpRequest request = requestBuilder.build();
         HttpResponse<String> response = send(request);
         if (response.statusCode() == 404) {
             throw new GraphDBOperationException(GraphDBOperationException.ErrorCategory.REPO_NOT_FOUND,
@@ -87,12 +89,13 @@ final class GraphDBRestClient {
     }
 
     List<String> listRepositories() {
-        HttpRequest request = HttpRequest.newBuilder()
+        HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
                 .uri(URI.create(endpointUrl + "/rest/repositories"))
                 .timeout(Duration.ofSeconds(30))
                 .header("Accept", "application/json")
-                .GET()
-                .build();
+                .GET();
+        credentials.authorizationHeader().ifPresent(value -> requestBuilder.header("Authorization", value));
+        HttpRequest request = requestBuilder.build();
         HttpResponse<String> response = send(request);
         if (response.statusCode() / 100 != 2) {
             throw errorFor(response, "listRepositories()");
@@ -101,27 +104,8 @@ final class GraphDBRestClient {
     }
 
     /**
-     * Reads the bundled {@code chase-rules.pie} ruleset from the classpath resource
-     * ({@link #BUNDLED_RULESET_RESOURCE}). This resource must exist as a UTF-8 encoded Datalog
-     * rule file. Throws {@code IllegalStateException} if the resource is missing or cannot be read.
-     *
-     * @return ruleset content as a string
-     */
-    private String readBundledRuleset() {
-        try (InputStream in = GraphDBRestClient.class.getResourceAsStream(BUNDLED_RULESET_RESOURCE)) {
-            if (in == null) {
-                throw new IllegalStateException("Bundled ruleset resource not found on classpath: "
-                        + BUNDLED_RULESET_RESOURCE);
-            }
-            return new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
-        } catch (IOException e) {
-            throw new IllegalStateException("Failed to read bundled ruleset resource", e);
-        }
-    }
-
-    /**
-     * Generates a Turtle-formatted repository configuration for GraphDB, bound to the bundled
-     * ruleset ({@link #RULESET_ID}). Key settings: disable-sameAs (RDF semantics, not OWL),
+     * Generates a Turtle-formatted repository configuration for GraphDB, bound to the configured
+     * server-side ruleset path. Key settings: disable-sameAs (RDF semantics, not OWL),
      * no inconsistency checks (Datalog only, no disjointness), context index enabled (efficient
      * named-graph queries), in-memory literal properties (for index performance). Configuration
      * is sent to GraphDB's /rest/repositories endpoint during repository creation.
@@ -153,7 +137,12 @@ final class GraphDBRestClient {
                             graphdb:enable-literal-index "true";
                         ]
                     ] .
-                """.formatted(repoName, repoName, RULESET_ID);
+                """.formatted(repoName, repoName, rulesetPath());
+    }
+
+    private String rulesetPath() {
+        String configuredPath = System.getenv("RKG_GRAPHDB_RULESET_PATH");
+        return configuredPath == null || configuredPath.isBlank() ? DEFAULT_RULESET_PATH : configuredPath;
     }
 
     private HttpResponse<String> send(HttpRequest request) {

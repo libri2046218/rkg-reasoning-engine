@@ -40,7 +40,7 @@ public final class Rdf4jDefinitenessValidator implements DefinitenessValidator {
         List<String> indefiniteClasses = new ArrayList<>();
         List<String> indefiniteProperties = new ArrayList<>();
 
-        for (String classIri : candidateElements(repoName, DefinitenessQueries.candidateClasses())) {
+        for (String classIri : candidateElements(repoName, DefinitenessQueries.candidateClasses(), "a")) {
             boolean populated = ask(repoName, DefinitenessQueries.classPopulated(classIri));
             boolean bottom = !populated && ask(repoName, DefinitenessQueries.classIsBottom(classIri));
             if (!populated && !bottom) {
@@ -48,7 +48,7 @@ public final class Rdf4jDefinitenessValidator implements DefinitenessValidator {
             }
         }
 
-        for (String propertyIri : candidateElements(repoName, DefinitenessQueries.candidateProperties())) {
+        for (String propertyIri : candidateElements(repoName, DefinitenessQueries.candidateProperties(), "p")) {
             boolean populated = ask(repoName, DefinitenessQueries.propertyPopulated(propertyIri));
             boolean subPropertyOfEvery = !populated
                     && ask(repoName, DefinitenessQueries.propertyIsSubPropertyOfEvery(propertyIri));
@@ -70,11 +70,11 @@ public final class Rdf4jDefinitenessValidator implements DefinitenessValidator {
         return report;
     }
 
-    private List<String> candidateElements(String repoName, String selectQuery) {
+    private List<String> candidateElements(String repoName, String selectQuery, String bindingName) {
         QueryResult result = connector.query(repoName, selectQuery, true, List.of());
         List<String> elements = new ArrayList<>();
         for (var row : result.rows()) {
-            String value = row.get("a");
+            String value = row.get(bindingName);
             if (value != null) {
                 elements.add(value);
             }

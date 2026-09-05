@@ -19,6 +19,10 @@ import org.rkg.config.RkgContext;
                 RepoCommand.class,
                 DataCommand.class,
                 QueryCommand.class,
+                UpdateCommand.class,
+                BackupCommand.class,
+                RestoreCommand.class,
+                NamespacesCommand.class,
                 ValidateCommand.class,
                 ChaseCommand.class
         }

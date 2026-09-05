@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.Map;
 import org.eclipse.rdf4j.model.Statement;
 import org.eclipse.rdf4j.model.Value;
+import org.eclipse.rdf4j.model.Resource;
 import org.eclipse.rdf4j.query.BindingSet;
 import org.eclipse.rdf4j.query.BooleanQuery;
 import org.eclipse.rdf4j.query.GraphQuery;
@@ -23,6 +24,7 @@ import org.eclipse.rdf4j.repository.RepositoryException;
 import org.eclipse.rdf4j.repository.http.HTTPRepository;
 import org.eclipse.rdf4j.rio.RDFFormat;
 import org.eclipse.rdf4j.rio.RDFParseException;
+import org.rkg.config.GraphDbCredentials;
 import org.rkg.repostate.RepoStateStore;
 
 /**
@@ -43,6 +45,7 @@ public final class Rdf4jGraphDBConnector implements GraphDBConnector {
     private final String endpointUrl;
     private final GraphDBRestClient restClient;
     private final RepoStateStore repoStateStore;
+    private final GraphDbCredentials credentials;
 
     /**
      * Creates a connector, normalizing the endpoint URL (stripping trailing slash) and creating a
@@ -54,19 +57,33 @@ public final class Rdf4jGraphDBConnector implements GraphDBConnector {
      * @param repoStateStore persistent store for staleness tracking and validation results
      */
     public Rdf4jGraphDBConnector(String endpointUrl, RepoStateStore repoStateStore) {
+        this(endpointUrl, repoStateStore, new GraphDbCredentials(null, null, null));
+    }
+
+    /**
+     * Creates a connector with optional HTTP Basic or bearer-token credentials.
+     *
+     * @param endpointUrl GraphDB endpoint
+     * @param repoStateStore persistent store for staleness tracking and validation results
+     * @param credentials GraphDB credentials, or an unauthenticated credential set
+     */
+    public Rdf4jGraphDBConnector(String endpointUrl, RepoStateStore repoStateStore, GraphDbCredentials credentials) {
         this.endpointUrl = endpointUrl.endsWith("/") ? endpointUrl.substring(0, endpointUrl.length() - 1) : endpointUrl;
-        this.restClient = new GraphDBRestClient(this.endpointUrl);
+        this.restClient = new GraphDBRestClient(this.endpointUrl, credentials);
         this.repoStateStore = repoStateStore;
+        this.credentials = credentials;
     }
 
     @Override
     public void createRepository(String name) {
+        RepositoryNames.requireValid(name);
         restClient.createRepository(name);
         repoStateStore.createRepoState(endpointUrl, name);
     }
 
     @Override
     public void deleteRepository(String name) {
+        RepositoryNames.requireValid(name);
         restClient.deleteRepository(name);
         repoStateStore.deleteRepoState(endpointUrl, name);
     }
@@ -74,6 +91,38 @@ public final class Rdf4jGraphDBConnector implements GraphDBConnector {
     @Override
     public List<String> listRepositories() {
         return restClient.listRepositories();
+    }
+
+    @Override
+    public Map<String, String> namespaces(String repoName) {
+        return withConnectionResult(repoName, conn -> {
+            Map<String, String> namespaces = new LinkedHashMap<>();
+            try (var result = conn.getNamespaces()) {
+                while (result.hasNext()) {
+                    var namespace = result.next();
+                    namespaces.put(namespace.getPrefix(), namespace.getName());
+                }
+            }
+            return namespaces;
+        });
+    }
+
+    @Override
+    public void setNamespace(String repoName, String prefix, String namespace) {
+        withConnection(repoName, conn -> conn.setNamespace(prefix, namespace));
+        repoStateStore.markStale(endpointUrl, repoName);
+    }
+
+    @Override
+    public void removeNamespace(String repoName, String prefix) {
+        withConnection(repoName, conn -> conn.removeNamespace(prefix));
+        repoStateStore.markStale(endpointUrl, repoName);
+    }
+
+    @Override
+    public void clearNamespaces(String repoName) {
+        withConnection(repoName, RepositoryConnection::clearNamespaces);
+        repoStateStore.markStale(endpointUrl, repoName);
     }
 
     @Override
@@ -110,24 +159,31 @@ public final class Rdf4jGraphDBConnector implements GraphDBConnector {
 
     @Override
     public QueryResult query(String repoName, String sparqlQuery, boolean infer, List<String> namedGraphs) {
+        return query(repoName, sparqlQuery, infer, namedGraphs, Map.of());
+    }
+
+    @Override
+    public QueryResult query(String repoName, String sparqlQuery, boolean infer, List<String> namedGraphs,
+                             Map<String, Value> bindings) {
         return withConnectionResult(repoName, conn -> {
             try {
                 Query query = conn.prepareQuery(QueryLanguage.SPARQL, sparqlQuery);
+                bindings.forEach(query::setBinding);
                 boolean rkgQuery = infer || namedGraphs.contains(WITNESS_GRAPH);
                 query.setIncludeInferred(rkgQuery);
                 org.eclipse.rdf4j.query.impl.SimpleDataset dataset = new org.eclipse.rdf4j.query.impl.SimpleDataset();
                 if (rkgQuery) {
-                    dataset.addDefaultGraph(null);
-                    dataset.addNamedGraph(conn.getValueFactory().createIRI(BASE_DATA_GRAPH));
-                    dataset.addNamedGraph(conn.getValueFactory().createIRI(WITNESS_GRAPH));
+                    addRkgDatasetGraphs(conn, dataset);
                     for (String namedGraph : namedGraphs) {
                         if (!WITNESS_GRAPH.equals(namedGraph)) {
+                            dataset.addDefaultGraph(conn.getValueFactory().createIRI(namedGraph));
                             dataset.addNamedGraph(conn.getValueFactory().createIRI(namedGraph));
                         }
                     }
                 } else {
                     dataset.addDefaultGraph(conn.getValueFactory().createIRI(BASE_DATA_GRAPH));
                 }
+
                 query.setDataset(dataset);
 
                 if (query instanceof BooleanQuery booleanQuery) {
@@ -135,17 +191,16 @@ public final class Rdf4jGraphDBConnector implements GraphDBConnector {
                 } else if (query instanceof TupleQuery tupleQuery) {
                     try (TupleQueryResult result = tupleQuery.evaluate()) {
                         List<String> variableNames = result.getBindingNames();
-                        List<Map<String, String>> rows = new ArrayList<>();
+                        List<Map<String, Value>> rows = new ArrayList<>();
                         while (result.hasNext()) {
                             BindingSet bindingSet = result.next();
-                            Map<String, String> row = new LinkedHashMap<>();
+                            Map<String, Value> row = new LinkedHashMap<>();
                             for (String var : variableNames) {
-                                Value value = bindingSet.getValue(var);
-                                row.put(var, value == null ? null : value.stringValue());
+                                row.put(var, bindingSet.getValue(var));
                             }
                             rows.add(row);
                         }
-                        return QueryResult.select(variableNames, rows);
+                        return QueryResult.selectValues(variableNames, rows);
                     }
                 } else if (query instanceof GraphQuery graphQuery) {
                     List<Statement> statements = new ArrayList<>();
@@ -165,11 +220,32 @@ public final class Rdf4jGraphDBConnector implements GraphDBConnector {
         });
     }
 
+    private void addRkgDatasetGraphs(RepositoryConnection connection,
+                                     org.eclipse.rdf4j.query.impl.SimpleDataset dataset) {
+        // GraphDB's RDF4J endpoint exposes its union view through the null default context.
+        // Contexts are added as named graphs for explicit GRAPH-pattern visibility.
+        dataset.addDefaultGraph(null);
+        try (var contexts = connection.getContextIDs()) {
+            while (contexts.hasNext()) {
+                Resource context = contexts.next();
+                if (context instanceof org.eclipse.rdf4j.model.IRI iri) {
+                    dataset.addNamedGraph(iri);
+                }
+            }
+        }
+    }
+
     @Override
     public void update(String repoName, String sparqlUpdate) {
+        update(repoName, sparqlUpdate, Map.of());
+    }
+
+    @Override
+    public void update(String repoName, String sparqlUpdate, Map<String, Value> bindings) {
         withConnection(repoName, conn -> {
             try {
                 Update update = conn.prepareUpdate(QueryLanguage.SPARQL, sparqlUpdate);
+                bindings.forEach(update::setBinding);
                 update.execute();
             } catch (MalformedQueryException e) {
                 throw new GraphDBOperationException(GraphDBOperationException.ErrorCategory.MALFORMED_QUERY,
@@ -190,7 +266,13 @@ public final class Rdf4jGraphDBConnector implements GraphDBConnector {
     }
 
     private HTTPRepository open(String repoName) {
+        RepositoryNames.requireValid(repoName);
         HTTPRepository repository = new HTTPRepository(endpointUrl, repoName);
+        if (credentials.username() != null) {
+            repository.setUsernameAndPassword(credentials.username(), credentials.password());
+        }
+        credentials.authorizationHeader().filter(header -> credentials.token() != null)
+                .ifPresent(header -> repository.setAdditionalHttpHeaders(Map.of("Authorization", header)));
         try {
             repository.init();
         } catch (RepositoryException e) {

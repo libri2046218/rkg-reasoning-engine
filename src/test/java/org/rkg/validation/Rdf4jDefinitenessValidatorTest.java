@@ -79,7 +79,7 @@ class Rdf4jDefinitenessValidatorTest {
         when(connector.query(eq(REPO), eq(DefinitenessQueries.candidateClasses()), eq(true), eq(List.of())))
                 .thenReturn(rowsOf("a", List.of()));
         when(connector.query(eq(REPO), eq(DefinitenessQueries.candidateProperties()), eq(true), eq(List.of())))
-                .thenReturn(rowsOf("a", List.of(POPULATED_PROP, SUBPROP_PROP, UNIVERSAL_DOMAIN_RANGE_PROP, INDEFINITE_PROP)));
+                .thenReturn(rowsOf("p", List.of(POPULATED_PROP, SUBPROP_PROP, UNIVERSAL_DOMAIN_RANGE_PROP, INDEFINITE_PROP)));
 
         stubPropertyDefinite(connector, POPULATED_PROP, true, null, null, null);
         stubPropertyDefinite(connector, SUBPROP_PROP, false, true, null, null);

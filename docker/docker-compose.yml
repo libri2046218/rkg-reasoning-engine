@@ -6,5 +6,3 @@ services:
     volumes:
       - ../rules/chase-rules.pie:/opt/graphdb/rules/chase-rules.pie
       - ../src/main/resources/graphdb.license:/opt/graphdb/home/conf/graphdb.license
-    environment:
-      GDB_JAVA_OPTS: "-Denable-debug-rules=true"

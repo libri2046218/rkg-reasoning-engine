@@ -2,7 +2,6 @@ package org.rkg.cli;
 
 import java.nio.file.Path;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.Callable;
 import org.rkg.config.RkgContext;
 import org.rkg.connector.QueryResult;
@@ -33,6 +32,12 @@ public final class QueryCommand implements Callable<Integer> {
     @Option(names = "--raw", description = "Bypass RKG semantics: infer=false, default graph only, no staleness check.")
     private boolean raw;
 
+    @Option(names = "--json", description = "Render the result as JSON to standard output.")
+    private boolean json;
+
+    @Option(names = "--csv", description = "Render the result as CSV to standard output.")
+    private boolean csv;
+
     @Option(names = "--file", description = "Path to a .sparql/.rq file containing the query text.")
     private Path file;
 
@@ -45,6 +50,9 @@ public final class QueryCommand implements Callable<Integer> {
 
     @Override
     public Integer call() throws Exception {
+        if (json && csv) {
+            throw new IllegalArgumentException("Specify at most one of --json or --csv.");
+        }
         String sparqlQuery = QueryInputResolver.resolve(inlineQuery, file);
         RkgContext context = parent.context();
 
@@ -52,21 +60,7 @@ public final class QueryCommand implements Callable<Integer> {
                 ? context.connector().query(repo, sparqlQuery, false, List.of())
                 : context.queryAnsweringEngine().query(repo, sparqlQuery);
 
-        render(result);
+        System.out.print(QueryResultRenderer.render(result, json, csv));
         return ExitCodes.OK;
-    }
-
-    private void render(QueryResult result) {
-        switch (result.kind()) {
-            case ASK -> System.out.println(result.askResult());
-            case SELECT -> {
-                List<String> vars = result.variableNames();
-                System.out.println(String.join("\t", vars));
-                for (Map<String, String> row : result.rows()) {
-                    System.out.println(vars.stream().map(v -> String.valueOf(row.get(v))).reduce((a, b) -> a + "\t" + b).orElse(""));
-                }
-            }
-            case GRAPH -> result.statements().forEach(System.out::println);
-        }
     }
 }

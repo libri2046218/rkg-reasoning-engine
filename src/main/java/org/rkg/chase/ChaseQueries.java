@@ -19,49 +19,54 @@ final class ChaseQueries {
         return "SELECT (COUNT(*) AS ?c) WHERE { ?s ?p ?o }";
     }
 
-    /** Every currently populated class {@code a}, with a marker for whether it is a blank node. */
+    /** Every currently populated class {@code a}. */
     static String populatedClasses() {
         return """
-                SELECT DISTINCT ?a (IF(isBlank(?a), "true", "false") AS ?isBlank) WHERE {
+                SELECT DISTINCT ?a WHERE {
                     ?b <%s> ?a .
                     FILTER (!STRSTARTS(STR(?a), "%s"))
                 }""".formatted(RDF_TYPE, WITNESS_NAMESPACE);
     }
 
-    /** Every currently populated property {@code p}, with a marker for whether it is a blank node. */
+    /** Every currently populated property {@code p}. */
     static String populatedProperties() {
         return """
-                SELECT DISTINCT ?p (IF(isBlank(?p), "true", "false") AS ?isBlank) WHERE {
+                SELECT DISTINCT ?p WHERE {
                     ?a ?p ?b .
                     FILTER (!STRSTARTS(STR(?p), "%s"))
                 }""".formatted(WITNESS_NAMESPACE);
     }
 
-    /** Whether a rule-22 witness already exists for class {@code a} in the witness graph. */
-    static String classWitnessExists(String classIri, String witnessIri) {
-        return "ASK { GRAPH <%s> { <%s> <%s> <%s> } }".formatted(WITNESS_GRAPH, witnessIri, RDF_TYPE, classIri);
+    /**
+     * Whether a rule-22 witness exists in the witness graph. Callers bind {@code witness} and
+     * {@code classTerm} as RDF4J values; this is essential when {@code classTerm} is a blank node.
+     */
+    static String classWitnessExists() {
+        return "ASK { GRAPH <%s> { ?witness <%s> ?classTerm } }".formatted(WITNESS_GRAPH, RDF_TYPE);
     }
 
-    /** Whether a rule-23 witness pair already exists for property {@code p} in the witness graph. */
-    static String propertyWitnessExists(String propertyIri, String sourceWitnessIri, String targetWitnessIri) {
-        return "ASK { GRAPH <%s> { <%s> <%s> <%s> } }"
-                .formatted(WITNESS_GRAPH, sourceWitnessIri, propertyIri, targetWitnessIri);
+    /**
+     * Whether a rule-23 witness pair exists in the witness graph. Callers bind {@code source},
+     * {@code propertyTerm}, and {@code target} as RDF4J values.
+     */
+    static String propertyWitnessExists() {
+        return "ASK { GRAPH <%s> { ?source ?propertyTerm ?target } }".formatted(WITNESS_GRAPH);
     }
 
-    /** Batched INSERT DATA installing every newly-minted witness triple in one round trip. */
-    static String insertWitnessesUpdate(Iterable<String> witnessTriples) {
-        StringBuilder body = new StringBuilder();
-        for (String triple : witnessTriples) {
-            body.append("        ").append(triple).append(" .\n");
+    /**
+     * Batched INSERT installing witness triples in one round trip. The {@code subjectN},
+     * {@code predicateN}, and {@code objectN} variables must be RDF4J-bound by the caller.
+     */
+    static String insertWitnessesUpdate(int tripleCount) {
+        if (tripleCount < 1) {
+            throw new IllegalArgumentException("At least one witness triple is required");
         }
-        return "INSERT DATA { GRAPH <%s> {\n%s    } }".formatted(WITNESS_GRAPH, body);
-    }
-
-    static String classWitnessTriple(String witnessIri, String classIri) {
-        return "<%s> <%s> <%s>".formatted(witnessIri, RDF_TYPE, classIri);
-    }
-
-    static String propertyWitnessTriple(String sourceWitnessIri, String propertyIri, String targetWitnessIri) {
-        return "<%s> <%s> <%s>".formatted(sourceWitnessIri, propertyIri, targetWitnessIri);
+        StringBuilder body = new StringBuilder();
+        for (int index = 0; index < tripleCount; index++) {
+            body.append("        ?subject").append(index)
+                    .append(" ?predicate").append(index)
+                    .append(" ?object").append(index).append(" .\n");
+        }
+        return "INSERT { GRAPH <%s> {\n%s    } } WHERE { }".formatted(WITNESS_GRAPH, body);
     }
 }

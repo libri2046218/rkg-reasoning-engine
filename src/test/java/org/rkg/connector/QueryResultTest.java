@@ -9,6 +9,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.eclipse.rdf4j.model.Statement;
+import org.eclipse.rdf4j.model.Value;
+import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -32,7 +34,17 @@ class QueryResultTest {
         assertEquals(varNames, result.variableNames());
         assertEquals(List.of(row), result.rows());
         assertTrue(result.askResult() == null);
-        assertTrue(result.statements() == null);
+        assertTrue(result.statements().isEmpty());
+    }
+
+    @Test
+    void selectValuesRetainsOriginalRdf4jBlankNodeBindings() {
+        Value blankNode = SimpleValueFactory.getInstance().createBNode("term");
+
+        QueryResult result = QueryResult.selectValues(List.of("term"), List.of(Map.of("term", blankNode)));
+
+        assertEquals("term", result.rows().get(0).get("term"));
+        assertTrue(blankNode == result.valueRows().get(0).get("term"));
     }
 
     @Test

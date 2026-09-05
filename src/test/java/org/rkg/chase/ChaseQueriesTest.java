@@ -1,6 +1,7 @@
 package org.rkg.chase;
 
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.junit.jupiter.api.Test;
@@ -26,14 +27,12 @@ class ChaseQueriesTest {
     }
 
     @Test
-    void populatedClassesReturnsSelectWithClassAndBlankNodeFlag() {
+    void populatedClassesReturnsSelectWithClassTerm() {
         String query = ChaseQueries.populatedClasses();
         
         assertNotNull(query);
         assertTrue(query.contains("SELECT DISTINCT"));
         assertTrue(query.contains("?a"));
-        assertTrue(query.contains("?isBlank"));
-        assertTrue(query.contains("IF(isBlank(?a)"));
         assertTrue(query.contains("rdf-syntax-ns#type"));
         assertTrue(query.contains("urn:rkg:witness:"));
         assertTrue(query.contains("FILTER"));
@@ -41,103 +40,59 @@ class ChaseQueriesTest {
     }
 
     @Test
-    void populatedPropertiesReturnsSelectWithPropertyAndBlankNodeFlag() {
+    void populatedPropertiesReturnsSelectWithPropertyTerm() {
         String query = ChaseQueries.populatedProperties();
         
         assertNotNull(query);
         assertTrue(query.contains("SELECT DISTINCT"));
         assertTrue(query.contains("?p"));
-        assertTrue(query.contains("?isBlank"));
-        assertTrue(query.contains("IF(isBlank(?p)"));
         assertTrue(query.contains("?a ?p ?b"));
         assertTrue(query.contains("FILTER"));
         assertTrue(query.contains("STRSTARTS"));
     }
 
     @Test
-    void classWitnessExistsBuildsAskQueryWithWitnessGraph() {
-        String classIri = "http://example.org/ontology#Person";
-        String witnessIri = "urn:rkg:witness:class:Person";
-        String query = ChaseQueries.classWitnessExists(classIri, witnessIri);
+    void classWitnessExistsUsesBoundClassTerm() {
+        String query = ChaseQueries.classWitnessExists();
         
         assertNotNull(query);
         assertTrue(query.contains("ASK"));
         assertTrue(query.contains("GRAPH"));
         assertTrue(query.contains("urn:rkg:witnesses"));
-        assertTrue(query.contains(classIri));
-        assertTrue(query.contains(witnessIri));
+        assertTrue(query.contains("?witness"));
+        assertTrue(query.contains("?classTerm"));
         assertTrue(query.contains("rdf-syntax-ns#type"));
     }
 
     @Test
-    void propertyWitnessExistsBuildsAskQueryForWitnessPair() {
-        String propertyIri = "http://example.org/ontology#worksFor";
-        String sourceWitness = "urn:rkg:witness:prop:src:worksFor";
-        String targetWitness = "urn:rkg:witness:prop:tgt:worksFor";
-        String query = ChaseQueries.propertyWitnessExists(propertyIri, sourceWitness, targetWitness);
+    void propertyWitnessExistsUsesBoundPropertyTerm() {
+        String query = ChaseQueries.propertyWitnessExists();
         
         assertNotNull(query);
         assertTrue(query.contains("ASK"));
         assertTrue(query.contains("GRAPH"));
         assertTrue(query.contains("urn:rkg:witnesses"));
-        assertTrue(query.contains(propertyIri));
-        assertTrue(query.contains(sourceWitness));
-        assertTrue(query.contains(targetWitness));
+        assertTrue(query.contains("?source"));
+        assertTrue(query.contains("?propertyTerm"));
+        assertTrue(query.contains("?target"));
     }
 
     @Test
-    void insertWitnessesUpdateBuildsInsertDataWithWitnessGraph() {
-        String triple1 = "<urn:rkg:witness:class:Person> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example.org/ontology#Person>";
-        String triple2 = "<urn:rkg:witness:prop:src:x> <http://example.org/ontology#worksFor> <urn:rkg:witness:prop:tgt:x>";
-        
-        String update = ChaseQueries.insertWitnessesUpdate(java.util.List.of(triple1, triple2));
+    void insertWitnessesUpdateUsesBoundTerms() {
+        String update = ChaseQueries.insertWitnessesUpdate(2);
         
         assertNotNull(update);
-        assertTrue(update.contains("INSERT DATA"));
+        assertTrue(update.contains("INSERT"));
         assertTrue(update.contains("GRAPH"));
         assertTrue(update.contains("urn:rkg:witnesses"));
-        assertTrue(update.contains(triple1));
-        assertTrue(update.contains(triple2));
+        assertTrue(update.contains("?subject0 ?predicate0 ?object0"));
+        assertTrue(update.contains("?subject1 ?predicate1 ?object1"));
+        assertTrue(update.contains("WHERE { }"));
     }
 
     @Test
-    void insertWitnessesUpdateHandlesEmptyTripleList() {
-        String update = ChaseQueries.insertWitnessesUpdate(java.util.List.of());
-        
-        assertNotNull(update);
-        assertTrue(update.contains("INSERT DATA"));
-        assertTrue(update.contains("GRAPH"));
-        assertTrue(update.contains("urn:rkg:witnesses"));
-    }
-
-    @Test
-    void classWitnessTripleFormatsTripleCorrectly() {
-        String witnessIri = "urn:rkg:witness:class:Person";
-        String classIri = "http://example.org/ontology#Person";
-        String triple = ChaseQueries.classWitnessTriple(witnessIri, classIri);
-        
-        assertNotNull(triple);
-        assertTrue(triple.contains(witnessIri));
-        assertTrue(triple.contains(classIri));
-        assertTrue(triple.contains("rdf-syntax-ns#type"));
-        assertTrue(triple.startsWith("<"));
-        assertTrue(triple.endsWith(">"));
-    }
-
-    @Test
-    void propertyWitnessTripleFormatsTripleCorrectly() {
-        String sourceWitness = "urn:rkg:witness:prop:src:x";
-        String propertyIri = "http://example.org/ontology#worksFor";
-        String targetWitness = "urn:rkg:witness:prop:tgt:x";
-        
-        String triple = ChaseQueries.propertyWitnessTriple(sourceWitness, propertyIri, targetWitness);
-        
-        assertNotNull(triple);
-        assertTrue(triple.contains(sourceWitness));
-        assertTrue(triple.contains(propertyIri));
-        assertTrue(triple.contains(targetWitness));
-        assertTrue(triple.startsWith("<"));
-        assertTrue(triple.endsWith(">"));
+    void insertWitnessesUpdateRejectsAnEmptyBatch() {
+        assertThrows(IllegalArgumentException.class, () -> ChaseQueries.insertWitnessesUpdate(0));
     }
 
     @Test
@@ -145,8 +100,8 @@ class ChaseQueriesTest {
         // Verify that all queries use the correct RDF type IRI
         String expectedRdfType = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
         
-        String classTriple = ChaseQueries.classWitnessTriple("urn:ex:witness", "http://ex.org/Class");
-        assertTrue(classTriple.contains(expectedRdfType));
+        String classWitnessQuery = ChaseQueries.classWitnessExists();
+        assertTrue(classWitnessQuery.contains(expectedRdfType));
     }
 
     @Test

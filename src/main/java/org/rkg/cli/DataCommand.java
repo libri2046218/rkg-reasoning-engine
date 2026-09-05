@@ -57,7 +57,7 @@ public final class DataCommand implements Runnable {
         private String repo;
         @Option(names = "--file", required = true, description = "Path to the RDF file to import.")
         private Path file;
-        @Option(names = "--graph", description = "Target named graph IRI (default: default graph).")
+        @Option(names = "--graph", description = "Target named graph IRI (default: urn:rkg:base-data).")
         private String graph;
 
         @Override
@@ -79,7 +79,7 @@ public final class DataCommand implements Runnable {
         private String repo;
         @Option(names = "--file", required = true, description = "Output file path.")
         private Path file;
-        @Option(names = "--graph", description = "Source named graph IRI (default: default graph).")
+        @Option(names = "--graph", description = "Source named graph IRI (default: all graphs).")
         private String graph;
 
         @Override

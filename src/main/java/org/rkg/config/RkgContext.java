@@ -13,11 +13,12 @@ import org.rkg.validation.DefinitenessValidator;
 import org.rkg.validation.Rdf4jDefinitenessValidator;
 
 /**
- * Resolves the active GraphDB endpoint/credentials (Session/Config manager, §2.3, §4.5) and wires
+ * Resolves the active GraphDB endpoint and optional credentials (Session/Config manager, §2.3,
+ * §4.5) and wires
  * up the concrete component graph used by the CLI layer. Endpoint resolution order: {@code --endpoint}
  * CLI option, then the {@code RKG_ENDPOINT} environment variable, then a
- * {@code http://localhost:7200} default suited to the local Docker Compose GraphDB instance
- * (docker/docker-compose.yml).
+ * {@code http://localhost:7200} default used by the local test Compose GraphDB instance
+ * ({@code docker/docker-compose.test.yml}).
  */
 public final class RkgContext {
 
@@ -36,7 +37,7 @@ public final class RkgContext {
     public RkgContext(String endpointOverride) {
         this.endpointUrl = resolveEndpoint(endpointOverride);
         this.repoStateStore = new SqliteRepoStateStore(SqliteRepoStateStore.defaultDatabasePath());
-        this.connector = new Rdf4jGraphDBConnector(endpointUrl, repoStateStore);
+        this.connector = new Rdf4jGraphDBConnector(endpointUrl, repoStateStore, GraphDbCredentials.fromEnvironment());
         this.validator = new Rdf4jDefinitenessValidator(connector, repoStateStore, endpointUrl);
         this.chaseOrchestrator = new Rdf4jChaseOrchestrator(connector, validator, repoStateStore, endpointUrl);
         this.queryAnsweringEngine = new Rdf4jQueryAnsweringEngine(connector, repoStateStore, endpointUrl);

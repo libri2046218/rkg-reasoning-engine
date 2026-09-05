@@ -2,7 +2,12 @@ package org.rkg.chase;
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import org.eclipse.rdf4j.model.IRI;
+import org.eclipse.rdf4j.model.Value;
+import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
 import org.rkg.connector.GraphDBConnector;
 import org.rkg.connector.QueryResult;
 import org.rkg.repostate.RepoStateStore;
@@ -17,6 +22,9 @@ import org.rkg.validation.ValidationReport;
  * commit). No fixpoint loop is required: see §5.3 for the correctness argument.
  */
 public final class Rdf4jChaseOrchestrator implements ChaseOrchestrator {
+
+    private static final SimpleValueFactory VALUES = SimpleValueFactory.getInstance();
+    private static final IRI RDF_TYPE = VALUES.createIRI(ChaseQueries.RDF_TYPE);
 
     private final GraphDBConnector connector;
     private final DefinitenessValidator validator;
@@ -53,31 +61,42 @@ public final class Rdf4jChaseOrchestrator implements ChaseOrchestrator {
         // the baseline for reporting.
         int phase1Count = countDefaultGraphTriples(repoName);
 
+        // A repository made stale by a mutation may contain witnesses no longer supported by its
+        // base graph. Rebuild the reserved graph before deriving the current witness set.
+        boolean alreadyChased = repoStateStore.get(endpointUrl, repoName)
+                .map(org.rkg.repostate.RepoState::chased)
+                .orElse(false);
+        if (!alreadyChased) {
+            connector.update(repoName, "CLEAR GRAPH <urn:rkg:witnesses>");
+        }
+
         // Phase 2: batch Skolem witness generation (rules 22/23).
-        List<String> witnessTriples = new ArrayList<>();
+        List<WitnessTriple> witnessTriples = new ArrayList<>();
         for (var row : select(repoName, ChaseQueries.populatedClasses())) {
-            String classIri = row.get("a");
-            boolean isBlank = "true".equals(row.get("isBlank"));
-            String witness = SkolemNaming.classWitness(classIri, isBlank);
-            boolean exists = ask(repoName, ChaseQueries.classWitnessExists(classIri, witness));
+            Value classTerm = row.get("a");
+            String witness = SkolemNaming.classWitness(classTerm);
+            IRI witnessIri = VALUES.createIRI(witness);
+            boolean exists = ask(repoName, ChaseQueries.classWitnessExists(),
+                    Map.of("witness", witnessIri, "classTerm", classTerm));
             if (!exists) {
-                witnessTriples.add(ChaseQueries.classWitnessTriple(witness, classIri));
+                witnessTriples.add(new WitnessTriple(witnessIri, RDF_TYPE, classTerm));
             }
         }
         for (var row : select(repoName, ChaseQueries.populatedProperties())) {
-            String propertyIri = row.get("p");
-            boolean isBlank = "true".equals(row.get("isBlank"));
-            String sourceWitness = SkolemNaming.propertySourceWitness(propertyIri, isBlank);
-            String targetWitness = SkolemNaming.propertyTargetWitness(propertyIri, isBlank);
-            boolean exists = ask(repoName, ChaseQueries.propertyWitnessExists(propertyIri, sourceWitness, targetWitness));
+            Value propertyTerm = row.get("p");
+            IRI sourceWitness = VALUES.createIRI(SkolemNaming.propertySourceWitness(propertyTerm));
+            IRI targetWitness = VALUES.createIRI(SkolemNaming.propertyTargetWitness(propertyTerm));
+            boolean exists = ask(repoName, ChaseQueries.propertyWitnessExists(),
+                    Map.of("source", sourceWitness, "propertyTerm", propertyTerm, "target", targetWitness));
             if (!exists) {
-                witnessTriples.add(ChaseQueries.propertyWitnessTriple(sourceWitness, propertyIri, targetWitness));
+                witnessTriples.add(new WitnessTriple(sourceWitness, propertyTerm, targetWitness));
             }
         }
 
         int phase2Count = witnessTriples.size();
         if (!witnessTriples.isEmpty()) {
-            connector.update(repoName, ChaseQueries.insertWitnessesUpdate(witnessTriples));
+            connector.update(repoName, ChaseQueries.insertWitnessesUpdate(witnessTriples.size()),
+                    witnessBindings(witnessTriples));
         }
 
         // Phase 3: final closure pass. GraphDB materializes rules 1-21 over the newly inserted
@@ -95,11 +114,29 @@ public final class Rdf4jChaseOrchestrator implements ChaseOrchestrator {
         return Integer.parseInt(count);
     }
 
-    private List<java.util.Map<String, String>> select(String repoName, String query) {
-        return connector.query(repoName, query, true, List.of()).rows();
+    private List<Map<String, Value>> select(String repoName, String query) {
+        QueryResult result = connector.query(repoName, query, true, List.of());
+        if (result.valueRows().size() != result.rows().size()) {
+            throw new IllegalStateException("Chase SELECT results must retain RDF4J binding values");
+        }
+        return result.valueRows();
     }
 
-    private boolean ask(String repoName, String query) {
-        return Boolean.TRUE.equals(connector.query(repoName, query, true, List.of()).askResult());
+    private boolean ask(String repoName, String query, Map<String, Value> bindings) {
+        return Boolean.TRUE.equals(connector.query(repoName, query, true, List.of(), bindings).askResult());
+    }
+
+    private static Map<String, Value> witnessBindings(List<WitnessTriple> witnessTriples) {
+        Map<String, Value> bindings = new LinkedHashMap<>();
+        for (int index = 0; index < witnessTriples.size(); index++) {
+            WitnessTriple triple = witnessTriples.get(index);
+            bindings.put("subject" + index, triple.subject());
+            bindings.put("predicate" + index, triple.predicate());
+            bindings.put("object" + index, triple.object());
+        }
+        return bindings;
+    }
+
+    private record WitnessTriple(Value subject, Value predicate, Value object) {
     }
 }

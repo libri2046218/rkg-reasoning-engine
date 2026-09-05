@@ -3,6 +3,8 @@ package org.rkg.connector;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.List;
+import java.util.Map;
+import org.eclipse.rdf4j.model.Value;
 import org.eclipse.rdf4j.rio.RDFFormat;
 
 /**
@@ -18,9 +20,7 @@ import org.eclipse.rdf4j.rio.RDFFormat;
 public interface GraphDBConnector {
 
     /**
-     * Creates a repository and atomically installs the single bundled ruleset
-     * ({@code rules/chase-rules.pie}, rules 1-21). No ruleset parameter is exposed: the ruleset is
-     * fixed and not user-configurable (§7.2).
+     * Creates a repository configured with the fixed RKG ruleset located on the GraphDB server.
      *
      * @param name repository name
      */
@@ -41,12 +41,44 @@ public interface GraphDBConnector {
     List<String> listRepositories();
 
     /**
+     * Lists namespace prefix mappings configured in a repository.
+     *
+     * @param repoName repository name
+     * @return prefix-to-namespace mappings
+     */
+    Map<String, String> namespaces(String repoName);
+
+    /**
+     * Stores a namespace prefix mapping.
+     *
+     * @param repoName repository name
+     * @param prefix namespace prefix
+     * @param namespace namespace IRI
+     */
+    void setNamespace(String repoName, String prefix, String namespace);
+
+    /**
+     * Removes one namespace prefix mapping.
+     *
+     * @param repoName repository name
+     * @param prefix namespace prefix
+     */
+    void removeNamespace(String repoName, String prefix);
+
+    /**
+     * Removes every namespace prefix mapping.
+     *
+     * @param repoName repository name
+     */
+    void clearNamespaces(String repoName);
+
+    /**
      * Imports RDF data into a repository, optionally to a named graph.
      *
      * @param repoName target repository name
      * @param rdfData RDF input stream
      * @param format RDF format (TURTLE, RDFXML, NQUADS, etc.)
-     * @param targetGraph named graph IRI (null means default graph {@code urn:rkg:base-data})
+     * @param targetGraph named graph IRI (null maps imports to {@code urn:rkg:base-data})
      */
     void importData(String repoName, InputStream rdfData, RDFFormat format, String targetGraph);
 
@@ -56,7 +88,7 @@ public interface GraphDBConnector {
      * @param repoName source repository name
      * @param out RDF output stream
      * @param format RDF format (TURTLE, RDFXML, NQUADS, etc.)
-     * @param sourceGraph named graph IRI (null means default graph {@code urn:rkg:base-data})
+     * @param sourceGraph named graph IRI (null exports all contexts)
      */
     void exportData(String repoName, OutputStream out, RDFFormat format, String sourceGraph);
 
@@ -67,12 +99,31 @@ public interface GraphDBConnector {
      * @param sparqlQuery SPARQL query text
      * @param infer       whether to include reasoner-inferred statements; {@code false} together
      *                    with an empty {@code namedGraphs} list implements {@code rkg query --raw}.
-     * @param namedGraphs additional named graphs to union into the query's dataset; the
-     *                    {@code QueryAnsweringEngine} calls this with {@code infer=true} and
-     *                    {@code namedGraphs=["urn:rkg:witnesses"]}.
+     * @param namedGraphs extra graph IRIs exposed for explicit {@code GRAPH} patterns; RKG-aware
+     *                    queries additionally place every repository context in their default
+     *                    dataset so imported named-graph data participates in the chase path.
      * @return query result (SELECT, ASK, or GRAPH)
      */
     QueryResult query(String repoName, String sparqlQuery, boolean infer, List<String> namedGraphs);
+
+    /**
+     * Executes a SPARQL query with RDF4J bindings supplied out of band. Bindings preserve RDF
+     * term identity, including blank nodes, instead of interpolating terms into query text.
+     *
+     * @param repoName repository name
+     * @param sparqlQuery SPARQL query text
+     * @param infer whether to include reasoner-inferred statements
+     * @param namedGraphs additional named graphs to union into the query's dataset
+     * @param bindings variable bindings keyed without the {@code ?} sigil
+     * @return query result (SELECT, ASK, or GRAPH)
+     */
+    default QueryResult query(String repoName, String sparqlQuery, boolean infer, List<String> namedGraphs,
+                              Map<String, Value> bindings) {
+        if (!bindings.isEmpty()) {
+            throw new UnsupportedOperationException("RDF4J query bindings are not supported");
+        }
+        return query(repoName, sparqlQuery, infer, namedGraphs);
+    }
 
     /**
      * Executes a SPARQL update (INSERT/DELETE); marks the repository stale as a side effect.
@@ -81,6 +132,22 @@ public interface GraphDBConnector {
      * @param sparqlUpdate SPARQL update text
      */
     void update(String repoName, String sparqlUpdate);
+
+    /**
+     * Executes a SPARQL update with RDF4J bindings supplied out of band; marks the repository
+     * stale. Bindings preserve RDF term identity, including blank nodes, instead of
+     * interpolating terms into update text.
+     *
+     * @param repoName repository name
+     * @param sparqlUpdate SPARQL update text
+     * @param bindings variable bindings keyed without the {@code ?} sigil
+     */
+    default void update(String repoName, String sparqlUpdate, Map<String, Value> bindings) {
+        if (!bindings.isEmpty()) {
+            throw new UnsupportedOperationException("RDF4J update bindings are not supported");
+        }
+        update(repoName, sparqlUpdate);
+    }
 
     /**
      * Exports a repository's data as an N-Quads backup file.
